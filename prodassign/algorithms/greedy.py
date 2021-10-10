@@ -16,6 +16,5 @@ class GreedySolution(ProductAssignement):
 if __name__ == '__main__':
     problem = GreedySolution('data')
     solution = problem.build()
-    print(solution)
     solution = solution.optimize_capacities()
     print(solution)

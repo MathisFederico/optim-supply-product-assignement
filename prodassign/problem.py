@@ -4,8 +4,7 @@ from typing import Dict, List
 from copy import deepcopy
 
 import numpy as np
-from colorama import Fore
-from colorama import Style
+from colorama import Fore, Style
 
 from prodassign.loader import load_products_from_csv, load_transport_options
 
@@ -79,12 +78,19 @@ class Solution:
     def __init__(self, products_per_capacities: Dict[Capacity, List[Product]],
             problem:ProductAssignement):
         self.products_per_capacities = products_per_capacities
-        self.capacities_products = {}
+        self.capacities_products = self.compute_capacities()
         self.problem = problem
-        self.energy = self.compute_energy()
+        self._price = None
+        self._energy = None
 
     def neighbor(self) -> 'Solution':
-        raise NotImplementedError
+        products = deepcopy(self.products_per_capacities)
+        p = self.problem.capacities[1]
+        pallet_elements = products[p]
+        rd_elts = np.random.choice(len(pallet_elements), 2, replace=False)
+        products[p][rd_elts[0]], products[p][rd_elts[1]] = \
+            products[p][rd_elts[1]], products[p][rd_elts[0]]
+        return Solution(products, self.problem)
 
     def optimize_capacities(self) -> 'Solution':
         container, pallet = self.problem.capacities
@@ -103,7 +109,6 @@ class Solution:
             else:
                 last_container = capacities_products[container][-1]
                 last_container.content += last_pallet.content
-            self.compute_capacities()
             for product in last_pallet.content:
                 products_per_capacities[pallet].remove(product)
                 products_per_capacities[container].append(product)
@@ -127,20 +132,28 @@ class Solution:
 
         return last_pallet_weight + last_container_weight <= container.weight
 
-    def compute_energy(self):
-        self.compute_capacities()
-        price = 0
-        for capacity, filled_capacities in self.capacities_products.items(): 
-            price += len(filled_capacities) * capacity.price
-        return -price
+    def energy(self, weight_energy=0.1, volume_energy=10):
+        return - self.price \
+            - weight_energy * self.weight_left() \
+            - volume_energy * self.volume_left()
 
-    def compute_capacities(self):
+    @property
+    def price(self):
+        if self._price is None:
+            self._price = 0
+            for capacity, filled_capacities in self.capacities_products.items(): 
+                self._price += len(filled_capacities) * capacity.price
+        return self._price
+
+    def compute_capacities(self) -> Dict[Capacity, List[FilledCapacity]]:
+        capacities_products = {}
         for capacity, products in self.products_per_capacities.items():
-            capacities_products = self.fill_capacities(capacity, products)
-            self.capacities_products[capacity] = [
+            capacity_products = self.fill_capacities(capacity, products)
+            capacities_products[capacity] = [
                 FilledCapacity(capacity, products)
-                for products in capacities_products
+                for products in capacity_products
             ]
+        return capacities_products
 
     @staticmethod
     def fill_capacities(capacity:Capacity, products:List[Product]):
@@ -170,23 +183,39 @@ class Solution:
             capa_valid.append(np.all(filled_capa.valid for filled_capa in filled_capas))
         return np.all(capa_valid)
 
-    def contents_weights(self):
+    def contents_weights(self) -> Dict[Capacity, List[float]]:
         return {
             capa: [filled_capa.weight for filled_capa in self.capacities_products[capa]]
             for capa in self.problem.capacities
         }
 
-    def contents_volume(self):
+    def weight_left(self) -> float:
+        weight_left = 0
+        contents_weights = self.contents_weights()
+        for capa, capa_weights in contents_weights.items():
+            weight_left += np.sum(capa.weight - np.array(capa_weights))
+        return weight_left
+
+    def contents_volumes(self) -> Dict[Capacity, List[float]]:
         return {
             capa: [filled_capa.volume for filled_capa in self.capacities_products[capa]]
             for capa in self.problem.capacities
         }
 
+    def volume_left(self) -> float:
+        volume_left = 0
+        contents_volumes = self.contents_volumes()
+        for capa, capa_volumes in contents_volumes.items():
+            volume_left += np.sum(capa.volume - np.array(capa_volumes))
+        return volume_left
+
     def __str__(self) -> str:
         capa_used = [(capa, len(product_lists))
             for capa, product_lists in self.capacities_products.items()]
         color = Fore.GREEN if self.valid else Fore.RED
-        return color + f"Solution E={self.energy} | {capa_used}" + Style.RESET_ALL
+        return color + f"Solution {self.price:.0f}$ E={self.energy():.0f} | " + \
+            f"{capa_used} | FW:{self.weight_left():.0f} FV:{self.volume_left():.0f}" + \
+            Style.RESET_ALL
 
     def __repr__(self) -> str:
         return str(self.products_per_capacities)
