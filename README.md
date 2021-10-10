@@ -1,2 +1,2 @@
-# optim-supply-product-assignement
-Assignment of product for supply chain optimization
+# ProdAssign
+Assignment of product in containers and pallets for supply chain optimization.
