@@ -19,3 +19,5 @@ if __name__ == '__main__':
     print(solution)
     solution = solution.optimize_capacities()
     print(solution)
+    print(solution.contents_weights())
+    print(solution.contents_volume())
