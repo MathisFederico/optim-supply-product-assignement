@@ -15,6 +15,7 @@ class AnnealingSolution(RandomSolution):
         e = sol.energy()
 
         opt_sol = sol.optimize_capacities()
+        opt_e = opt_sol.energy()
         best = opt_sol
         best_e = opt_sol.energy()
 
