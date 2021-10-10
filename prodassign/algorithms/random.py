@@ -15,5 +15,7 @@ class RandomSolution(ProductAssignement):
 
 if __name__ == '__main__':
     problem = RandomSolution('data')
-    random_solution = problem.build()
-    print(random_solution)
+    solution = problem.build()
+    print(solution)
+    solution = solution.optimize_capacities()
+    print(solution)

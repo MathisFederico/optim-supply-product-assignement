@@ -1,7 +1,7 @@
 
 import os
 from typing import Dict, List
-import pprint
+from copy import deepcopy
 
 from prodassign.loader import load_products_from_csv, load_transport_options
 
@@ -18,6 +18,12 @@ class Product:
 
     def __repr__(self) -> str:
         return self.name
+
+    def __eq__(self, other: 'Product') -> bool:
+        return other.name == self.name
+
+    def __hash__(self) -> int:
+        return hash(self.name)
 
 class Capacity(Product):
 
@@ -45,19 +51,57 @@ class Solution:
     def __init__(self, products_per_capacities: Dict[Capacity, List[Product]],
             problem:ProductAssignement):
         self.products_per_capacities = products_per_capacities
-        self.number_of_capacity_needed = {}
+        self.capacities_products = {}
         self.problem = problem
         self.energy = self.compute_energy()
 
-    def neighbor(self, solution:'Solution') -> 'Solution':
-        return solution
+    def neighbor(self) -> 'Solution':
+        return self
+
+    def optimize_capacities(self) -> 'Solution':
+        container, pallet = self.problem.capacities
+        products_per_capacities = deepcopy(self.products_per_capacities)
+        capacities_products = deepcopy(self.capacities_products)
+
+        if len(capacities_products[pallet]) == 0:
+            return Solution(products_per_capacities, problem=self.problem)
+
+        last_palet = capacities_products[pallet][-1]
+        last_palet_weight = sum(product.weight for product in last_palet)
+
+        if len(capacities_products[container]) > 0:
+            last_container = capacities_products[container][-1]
+            last_container_weight = sum(product.weight for product in last_container)
+        else:
+            last_container_weight = 0
+
+        weight_left = container.weight - last_container_weight
+
+        while (len(capacities_products[pallet]) >= 6 or weight_left <= last_palet_weight) and \
+                len(capacities_products[pallet]) > 0:
+
+            last_palet = capacities_products[pallet].pop()
+            last_palet_weight = sum(product.weight for product in last_palet)
+
+            if len(capacities_products[container]) > 0:
+                last_container = capacities_products[container][-1]
+                last_container_weight = sum(product.weight for product in last_container)
+            else:
+                last_container_weight = 0
+            weight_left = container.weight - last_container_weight
+
+            for product in last_palet:
+                products_per_capacities[pallet].remove(product)
+                products_per_capacities[container].append(product)
+
+        return Solution(products_per_capacities, problem=self.problem)
 
     def compute_energy(self):
         price = 0
         for capacity, products in self.products_per_capacities.items():
-            number_of_capacity_needed = self.number_from_ordered_list(capacity, products)
-            self.number_of_capacity_needed[capacity] = number_of_capacity_needed
-            price += number_of_capacity_needed * capacity.price
+            capacities_products = self.fill_capacities(capacity, products)
+            self.capacities_products[capacity] = capacities_products
+            price += len(capacities_products) * capacity.price
         return -price
 
     @property
@@ -65,21 +109,22 @@ class Solution:
         return True
 
     @staticmethod
-    def number_from_ordered_list(capacity:Capacity, products:List[Product]):
+    def fill_capacities(capacity:Capacity, products:List[Product]):
         if len(products) == 0:
-            return 0
+            return []
 
         weight = 0
-        number_of_capacity_needed = 1
+        capacities_products = [[]]
         for product in products:
             if weight + product.weight > capacity.weight:
-                number_of_capacity_needed += 1
+                capacities_products.append([])
                 weight = 0
+            capacities_products[-1].append(product)
             weight += product.weight
-        return number_of_capacity_needed
+        return capacities_products
 
     def __str__(self) -> str:
-        capa_used = [(capa, number) for capa, number in self.number_of_capacity_needed.items()]
+        capa_used = [(capa, len(product_lists)) for capa, product_lists in self.capacities_products.items()]
         return f"{self.energy} {capa_used}"
 
     def __repr__(self) -> str:
