@@ -85,11 +85,38 @@ class Solution:
 
     def neighbor(self) -> 'Solution':
         products = deepcopy(self.products_per_capacities)
-        p = self.problem.capacities[1]
-        pallet_elements = products[p]
-        rd_elts = np.random.choice(len(pallet_elements), 2, replace=False)
-        products[p][rd_elts[0]], products[p][rd_elts[1]] = \
-            products[p][rd_elts[1]], products[p][rd_elts[0]]
+        capacities_with_elements = [
+            i for i, capa in enumerate(self.problem.capacities)
+            if len(products[capa]) > 0
+        ]
+        action = np.random.choice(capacities_with_elements + [len(self.problem.capacities)])
+
+        if action < len(self.problem.capacities): 
+            p = self.problem.capacities[action]
+            if len(products[p]) > 1: # Permute elements of a capacity
+                rd_elts = np.random.choice(range(len(products[p])), 2, replace=False)
+                products[p][rd_elts[0]], products[p][rd_elts[1]] = \
+                    products[p][rd_elts[1]], products[p][rd_elts[0]]
+            else:
+                other_capa_indexes = list(range(len(self.problem.capacities)))
+                other_capa_indexes.remove(action)
+                i2 = np.random.choice(other_capa_indexes)
+
+                other_p = self.problem.capacities[i2]
+                element = products[p].pop(np.random.randint(len(products[p])))
+                products[other_p].append(element)
+
+        else: # Switch element to an other capacity
+            i1 = np.random.choice(capacities_with_elements)
+            
+            other_capa_indexes = list(range(len(self.problem.capacities)))
+            other_capa_indexes.remove(i1)
+            i2 = np.random.choice(other_capa_indexes)
+
+            p1, p2 = self.problem.capacities[i1], self.problem.capacities[i2]
+            element = products[p1].pop()
+            products[p2].append(element)
+
         return Solution(products, self.problem)
 
     def optimize_capacities(self) -> 'Solution':
