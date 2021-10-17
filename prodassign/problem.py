@@ -158,10 +158,10 @@ class Solution:
 
         return last_pallet_weight + last_container_weight <= container.weight
 
-    def energy(self, weight_energy=0.1, volume_energy=10):
-        return - self.price \
-            - weight_energy * self.weight_left() \
-            - volume_energy * self.volume_left()
+    def energy(self, weight_energy=3, volume_energy=10):
+        return - self.price / self.problem.capacities[1].price \
+            + weight_energy * self.weight_left() \
+            + volume_energy * self.volume_left()
 
     @property
     def price(self):
@@ -219,7 +219,7 @@ class Solution:
         weight_left = 0
         contents_weights = self.contents_weights()
         for capa, capa_weights in contents_weights.items():
-            weight_left += np.sum(capa.weight - np.array(capa_weights))
+            weight_left += np.sum(np.abs(np.array(capa_weights) / capa.weight - 1/2))
         return weight_left
 
     def contents_volumes(self) -> Dict[Capacity, List[float]]:
@@ -232,15 +232,15 @@ class Solution:
         volume_left = 0
         contents_volumes = self.contents_volumes()
         for capa, capa_volumes in contents_volumes.items():
-            volume_left += np.sum(capa.volume - np.array(capa_volumes))
+            volume_left += np.sum(np.abs(np.array(capa_volumes) / capa.volume - 1/2))
         return volume_left
 
     def __str__(self) -> str:
         capa_used = [(capa, len(product_lists))
             for capa, product_lists in self.capacities_products.items()]
         color = Fore.GREEN if self.valid else Fore.RED
-        return color + f"Solution {self.price:.0f}$ E={self.energy():.0f} | " + \
-            f"{capa_used} | FW:{self.weight_left():.0f} FV:{self.volume_left():.0f}" + \
+        return color + f"Solution {self.price:.0f}$ E={self.energy():.2f} | " + \
+            f"{capa_used} | FW:{self.weight_left():.2f} FV:{self.volume_left():.2f}" + \
             Style.RESET_ALL
 
     def __repr__(self) -> str:
