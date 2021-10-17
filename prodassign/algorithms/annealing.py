@@ -19,8 +19,6 @@ class AnnealingSolution(RandomSolution):
         best = opt_sol
         best_e = opt_sol.energy()
 
-        t0 = time.time()
-
         pbar = trange(iterations)
         pbar.bar_format = "{l_bar}%s{bar}%s{r_bar}" % (Fore.CYAN, Fore.RESET)
         for _ in pbar:
@@ -47,6 +45,6 @@ class AnnealingSolution(RandomSolution):
         return best
 
 if __name__ == '__main__':
-    problem = AnnealingSolution('data')
+    problem = AnnealingSolution('data', .9)
     solution = problem.search(4000, verbose=1)
     print(solution, '\n', repr(solution))

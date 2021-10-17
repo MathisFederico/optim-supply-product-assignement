@@ -14,7 +14,7 @@ class GreedySolution(ProductAssignement):
         return Solution(products_per_capacities, problem=self)
 
 if __name__ == '__main__':
-    problem = GreedySolution('data')
+    problem = GreedySolution('data', .9)
     solution = problem.build()
     solution = solution.optimize_capacities()
     print(solution)

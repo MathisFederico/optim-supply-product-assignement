@@ -58,10 +58,9 @@ class FilledCapacity:
     def __add__(self, other):
         self.content += other
 
-
 class ProductAssignement:
 
-    def __init__(self, path:str):
+    def __init__(self, path:str, fraction:float=1):
         self.products = [
             Product(*product_data)
             for product_data in load_products_from_csv(os.path.join(path, 'products'))
@@ -70,8 +69,8 @@ class ProductAssignement:
             Capacity(*capacity_data)
             for capacity_data in load_transport_options(os.path.join(path, 'capacities'))
         ]
-        print(f"Loaded problem from: {path}")
-
+        self.products = self.products[:max(1, int(fraction * len(self.products)))]
+        print(f"Loaded problem from: {path} ({fraction:.0%} = {len(self.products)} products)")
 
 class Solution:
 
