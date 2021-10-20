@@ -1,7 +1,6 @@
 
 import os
 from typing import Dict, List
-from copy import deepcopy
 
 import numpy as np
 from colorama import Fore, Style
@@ -37,6 +36,7 @@ class Capacity(Product):
 class FilledCapacity:
 
     def __init__(self, capacity:Capacity, products:List[Product]):
+        self.capacity = capacity
         self.capacity_name = capacity.name
         self.max_weight = capacity.weight
         self.max_volume = capacity.volume
@@ -51,12 +51,16 @@ class FilledCapacity:
     def volume(self):
         return sum(product.volume for product in self.content)
 
+    def can_take(self, product:Product):
+        return self.weight + product.weight <= self.max_weight and \
+               self.volume + product.volume <= self.max_volume
+
     @property
     def valid(self):
         return self.weight <= self.max_weight and self.volume <= self.max_volume
 
     def __add__(self, other):
-        self.content += other
+        return FilledCapacity(self.capacity, self.content + other)
 
 class ProductAssignement:
 
@@ -83,45 +87,42 @@ class Solution:
         self._energy = None
 
     def neighbor(self) -> 'Solution':
-        products = deepcopy(self.products_per_capacities)
+        products = self.products_per_capacities
         capacities_with_elements = [
             i for i, capa in enumerate(self.problem.capacities)
             if len(products[capa]) > 0
         ]
-        action = np.random.choice(capacities_with_elements + [len(self.problem.capacities)])
+        action = np.random.choice(capacities_with_elements)
+        switch = bool(np.random.randint(2))
 
-        if action < len(self.problem.capacities): 
+        if switch:
+            other_capa_indexes = list(range(len(self.problem.capacities)))
+            other_capa_indexes.remove(action)
+            i2 = np.random.choice(other_capa_indexes)
+
+            p1, p2 = self.problem.capacities[action], self.problem.capacities[i2]
+            element = products[p1].pop()
+            products[p2].append(element)
+        else:
             p = self.problem.capacities[action]
-            if len(products[p]) > 1: # Permute elements of a capacity
-                rd_elts = np.random.choice(range(len(products[p])), 2, replace=False)
-                products[p][rd_elts[0]], products[p][rd_elts[1]] = \
-                    products[p][rd_elts[1]], products[p][rd_elts[0]]
+            if len(products[p]) > 1: # Permute two successing elements of a capacity
+                elt_1, elt_2 = np.random.choice(range(len(products[p])), 2, replace=False)
+                products[p][elt_1], products[p][elt_2] = products[p][elt_2], products[p][elt_1]
             else:
                 other_capa_indexes = list(range(len(self.problem.capacities)))
                 other_capa_indexes.remove(action)
                 i2 = np.random.choice(other_capa_indexes)
 
                 other_p = self.problem.capacities[i2]
-                element = products[p].pop(np.random.randint(len(products[p])))
+                element = products[p].pop()
                 products[other_p].append(element)
-
-        else: # Switch element to an other capacity
-            i1 = np.random.choice(capacities_with_elements)
-            
-            other_capa_indexes = list(range(len(self.problem.capacities)))
-            other_capa_indexes.remove(i1)
-            i2 = np.random.choice(other_capa_indexes)
-
-            p1, p2 = self.problem.capacities[i1], self.problem.capacities[i2]
-            element = products[p1].pop()
-            products[p2].append(element)
 
         return Solution(products, self.problem)
 
     def optimize_capacities(self) -> 'Solution':
         container, pallet = self.problem.capacities
-        products_per_capacities = deepcopy(self.products_per_capacities)
-        capacities_products = deepcopy(self.capacities_products)
+        products_per_capacities = self.products_per_capacities.copy()
+        capacities_products = self.capacities_products.copy()
 
         if len(capacities_products[pallet]) == 0:
             return Solution(products_per_capacities, problem=self.problem)
@@ -158,8 +159,8 @@ class Solution:
 
         return last_pallet_weight + last_container_weight <= container.weight
 
-    def energy(self, weight_energy=3, volume_energy=10):
-        return - self.price / self.problem.capacities[1].price \
+    def energy(self, weight_energy=1, volume_energy=0.1):
+        return self.price / self.problem.capacities[1].price \
             + weight_energy * self.weight_left() \
             + volume_energy * self.volume_left()
 
@@ -218,9 +219,13 @@ class Solution:
     def weight_left(self) -> float:
         weight_left = 0
         contents_weights = self.contents_weights()
+        normalization = []
         for capa, capa_weights in contents_weights.items():
-            weight_left += np.sum(np.abs(np.array(capa_weights) / capa.weight - 1/2))
-        return weight_left
+            if len(capa_weights) > 0:
+                weight_left += np.sum((capa.weight - np.array(capa_weights)[:-2])**2) # Left in all but last
+                weight_left += capa_weights[-1] ** 2 # Used in last
+            normalization.append(capa.weight)
+        return weight_left / min(normalization) ** 2
 
     def contents_volumes(self) -> Dict[Capacity, List[float]]:
         return {
@@ -231,9 +236,13 @@ class Solution:
     def volume_left(self) -> float:
         volume_left = 0
         contents_volumes = self.contents_volumes()
+        normalization = []
         for capa, capa_volumes in contents_volumes.items():
-            volume_left += np.sum(np.abs(np.array(capa_volumes) / capa.volume - 1/2))
-        return volume_left
+            if len(capa_volumes) > 0:
+                volume_left += np.sum((capa.volume - np.array(capa_volumes)[:-2])**2) # Left in all but last
+                volume_left += capa_volumes[-1] ** 2# Used in last
+            normalization.append(capa.volume)
+        return volume_left / min(normalization) ** 2
 
     def __str__(self) -> str:
         capa_used = [(capa, len(product_lists))

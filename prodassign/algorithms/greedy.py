@@ -13,8 +13,11 @@ class GreedySolution(ProductAssignement):
             products_per_capacities[pallet].append(product)
         return Solution(products_per_capacities, problem=self)
 
-if __name__ == '__main__':
-    problem = GreedySolution('data', .9)
+def main():
+    problem = GreedySolution('data', 1.0)
     solution = problem.build()
     solution = solution.optimize_capacities()
     print(solution)
+
+if __name__ == '__main__':
+    main()
