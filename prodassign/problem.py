@@ -1,5 +1,6 @@
 
 import os
+import copy
 from typing import Dict, List
 
 import numpy as np
@@ -10,7 +11,8 @@ from prodassign.loader import load_products_from_csv, load_transport_options
 
 class Product:
 
-    def __init__(self, name:str, weight:float, volume:float) -> None:
+    def __init__(self, item_id:int, name:str, weight:float, volume:float) -> None:
+        self.item_id = item_id
         self.name = name
         self.weight = weight
         self.volume = volume
@@ -22,34 +24,35 @@ class Product:
         return self.name
 
     def __eq__(self, other: 'Product') -> bool:
-        return other.name == self.name
+        return hash(other) == hash(self)
 
     def __hash__(self) -> int:
-        return hash(self.name)
+        return self.item_id
 
 class Capacity(Product):
 
-    def __init__(self, name:str, weight:float, volume:float, price:float) -> None:
-        super().__init__(name, weight, volume)
+    def __init__(self, item_id:int, name:str, weight:float, volume:float, price:float) -> None:
+        super().__init__(item_id, name, weight, volume)
         self.price = price
 
 class FilledCapacity:
 
-    def __init__(self, capacity:Capacity, products:List[Product]):
+    def __init__(self, capacity:Capacity, products:List[Product], problem:'ProductAssignement'):
         self.capacity = capacity
         self.capacity_name = capacity.name
         self.max_weight = capacity.weight
         self.max_volume = capacity.volume
         self.price = capacity.price
         self.content = products
+        self.problem = problem
 
     @property
     def weight(self):
-        return sum(product.weight for product in self.content)
+        return sum(self.problem.products[product_id].weight for product_id in self.content)
 
     @property
     def volume(self):
-        return sum(product.volume for product in self.content)
+        return sum(self.problem.products[product_id].volume for product_id in self.content)
 
     def can_take(self, product:Product):
         return self.weight + product.weight <= self.max_weight and \
@@ -59,35 +62,36 @@ class FilledCapacity:
     def valid(self):
         return self.weight <= self.max_weight and self.volume <= self.max_volume
 
+    def __repr__(self) -> str:
+        return str(self.content)
+
     def __add__(self, other):
-        return FilledCapacity(self.capacity, self.content + other)
+        return FilledCapacity(self.capacity, self.content + other, self.problem)
 
 class ProductAssignement:
 
     def __init__(self, path:str, fraction:float=1):
         self.products = [
-            Product(*product_data)
-            for product_data in load_products_from_csv(os.path.join(path, 'products'))
+            Product(i, *product_data)
+            for i, product_data in enumerate(load_products_from_csv(os.path.join(path, 'products')))
         ]
         self.capacities = [
-            Capacity(*capacity_data)
-            for capacity_data in load_transport_options(os.path.join(path, 'capacities'))
+            Capacity(i, *capacity_data)
+            for i, capacity_data in enumerate(load_transport_options(os.path.join(path, 'capacities')))
         ]
         self.products = self.products[:max(1, int(fraction * len(self.products)))]
-        print(f"Loaded problem from: {path} ({fraction:.0%} = {len(self.products)} products)")
 
 class Solution:
 
-    def __init__(self, products_per_capacities: Dict[Capacity, List[Product]],
-            problem:ProductAssignement):
+    def __init__(self, products_per_capacities: Dict[int, List[int]], problem:ProductAssignement):
         self.products_per_capacities = products_per_capacities
-        self.capacities_products = self.compute_capacities()
         self.problem = problem
         self._price = None
-        self._energy = None
+        self._products_per_capacities = None
+        self._capacities_products = None
 
     def neighbor(self) -> 'Solution':
-        products = self.products_per_capacities
+        products = copy.deepcopy(self.products_per_capacities)
         capacities_with_elements = [
             i for i, capa in enumerate(self.problem.capacities)
             if len(products[capa]) > 0
@@ -119,29 +123,25 @@ class Solution:
 
         return Solution(products, self.problem)
 
-    def optimize_capacities(self) -> 'Solution':
+    def optimize_capacities(self):
         container, pallet = self.problem.capacities
-        products_per_capacities = self.products_per_capacities.copy()
-        capacities_products = self.capacities_products.copy()
+        self._price = None
+        capacities_products = self.capacities_products
 
         if len(capacities_products[pallet]) == 0:
-            return Solution(products_per_capacities, problem=self.problem)
+            return self
 
-        last_pallet_can_fit = self.last_pallet_can_fit(capacities_products)
+        last_pallet_can_fit = self.last_pallet_can_fit(self.capacities_products)
         while len(capacities_products[pallet]) >= 6 or last_pallet_can_fit:
-            last_pallet = capacities_products[pallet].pop()
-            if not last_pallet_can_fit:
-                capacities_products[container].append(
-                    FilledCapacity(container, last_pallet.content))
-            else:
-                last_container = capacities_products[container][-1]
-                last_container.content += last_pallet.content
-            for product in last_pallet.content:
-                products_per_capacities[pallet].remove(product)
-                products_per_capacities[container].append(product)
+            last_pallet = capacities_products[pallet][-1]
+            for product_id in last_pallet.content[::-1]:
+                self.products_per_capacities[pallet].remove(product_id)
+                self.products_per_capacities[container].append(product_id)
+
+            capacities_products = self.capacities_products
             last_pallet_can_fit = self.last_pallet_can_fit(capacities_products)
 
-        return Solution(products_per_capacities, problem=self.problem)
+        return self
 
     def last_pallet_can_fit(self, capacities_products):
         container, pallet = self.problem.capacities
@@ -149,48 +149,54 @@ class Solution:
             return False
 
         last_pallet = capacities_products[pallet][-1]
-        last_pallet_weight = sum(product.weight for product in last_pallet.content)
+        last_pallet_weight = sum(
+            self.problem.products[product_id].weight for product_id in last_pallet.content)
 
         if len(capacities_products[container]) > 0:
             last_container = capacities_products[container][-1]
-            last_container_weight = sum(product.weight for product in last_container.content)
+            last_container_weight = sum(
+                self.problem.products[product_id].weight for product_id in last_container.content)
         else:
             return False
 
         return last_pallet_weight + last_container_weight <= container.weight
 
-    def energy(self, weight_energy=1, volume_energy=0.1):
-        return self.price / self.problem.capacities[1].price \
-            + weight_energy * self.weight_left() \
-            + volume_energy * self.volume_left()
-
     @property
     def price(self):
         if self._price is None:
             self._price = 0
-            for capacity, filled_capacities in self.capacities_products.items(): 
+            for capacity_id, filled_capacities in self.capacities_products.items():
+                capacity = self.problem.capacities[capacity_id]
                 self._price += len(filled_capacities) * capacity.price
         return self._price
 
-    def compute_capacities(self) -> Dict[Capacity, List[FilledCapacity]]:
+    @property
+    def capacities_products(self) -> Dict[Capacity, List[FilledCapacity]]:
+        if self._products_per_capacities == self.products_per_capacities:
+            return self._capacities_products
+
         capacities_products = {}
-        for capacity, products in self.products_per_capacities.items():
+        for capacity_id, products in self.products_per_capacities.items():
+            capacity = self.problem.capacities[capacity_id]
             capacity_products = self.fill_capacities(capacity, products)
-            capacities_products[capacity] = [
-                FilledCapacity(capacity, products)
+            capacities_products[capacity_id] = [
+                FilledCapacity(capacity, products, self.problem)
                 for products in capacity_products
             ]
-        return capacities_products
+        self._products_per_capacities = copy.deepcopy(self.products_per_capacities)
+        self._capacities_products = capacities_products
+        return self._capacities_products
 
-    @staticmethod
-    def fill_capacities(capacity:Capacity, products:List[Product]):
-        if len(products) == 0:
+    def fill_capacities(self, capacity:Capacity, products_ids:List[int]):
+        if len(products_ids) == 0:
             return []
 
         weight = 0
         volume = 0
         capacities_products = [[]]
-        for product in products:
+
+        for product_id in products_ids:
+            product = self.problem.products[product_id]
             too_much_weight = weight + product.weight > capacity.weight
             too_much_volume = volume + product.volume > capacity.volume
 
@@ -199,8 +205,10 @@ class Solution:
                 weight = 0
                 volume = 0
 
-            capacities_products[-1].append(product)
+            capacities_products[-1].append(product_id)
             weight += product.weight
+            volume += product.volume
+
         return capacities_products
 
     @property
@@ -245,11 +253,11 @@ class Solution:
         return volume_left / min(normalization) ** 2
 
     def __str__(self) -> str:
-        capa_used = [(capa, len(product_lists))
+        capa_used = [(self.problem.capacities[capa].name, len(product_lists))
             for capa, product_lists in self.capacities_products.items()]
         color = Fore.GREEN if self.valid else Fore.RED
-        return color + f"Solution {self.price:.0f}$ E={self.energy():.2f} | " + \
-            f"{capa_used} | FW:{self.weight_left():.2f} FV:{self.volume_left():.2f}" + \
+        return color + f"Solution {self.price:.0f}$ | " + \
+            f"{capa_used} | Wleft:{self.weight_left():.1f} Vleft:{self.volume_left():.1f}" + \
             Style.RESET_ALL
 
     def __repr__(self) -> str:
