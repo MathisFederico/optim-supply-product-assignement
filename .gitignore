@@ -127,3 +127,13 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Logging
+wandb
+
+# Data
+*.pkl
+
+# Profiling
+profiling.py
+restats
