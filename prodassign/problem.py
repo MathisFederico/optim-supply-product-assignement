@@ -216,7 +216,17 @@ class Solution:
         capa_valid = []
         for _, filled_capas in self.capacities_products.items():
             capa_valid.append(np.all(filled_capa.valid for filled_capa in filled_capas))
-        return np.all(capa_valid)
+
+        all_products_are_choosen = True
+        for product in self.problem.products:
+            in_any_capa = False
+            for _, products in self.products_per_capacities.items():
+                if product in products:
+                    in_any_capa = True
+            if not in_any_capa:
+                all_products_are_choosen = False
+
+        return np.all(capa_valid) and all_products_are_choosen
 
     def contents_weights(self) -> Dict[Capacity, List[float]]:
         return {
