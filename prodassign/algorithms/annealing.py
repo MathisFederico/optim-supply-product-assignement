@@ -19,7 +19,7 @@ class AnnealingSolution(RandomSolution):
 
     def search(self, iterations=2, max_time=1e6, verbose=0, temperature=1, decay=1e-4,
             weight_energy=0, volume_energy=0, use_wandb=False) -> Solution:
-        sol = self.build()
+        sol = self.build(verbose=verbose, max_time=max_time)
         sol.optimize_capacities()
         e = self.energy(sol, weight_energy, volume_energy)
         best = sol

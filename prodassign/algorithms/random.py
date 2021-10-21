@@ -6,7 +6,7 @@ from prodassign.problem import ProductAssignement, Solution
 
 class RandomSolution(ProductAssignement):
 
-    def build(self, verbose=1):
+    def build(self, verbose=1, max_time=10):
         products_per_capacities = {capa.item_id:[] for capa in self.capacities}
         products = self.products.copy()
         np.random.shuffle(products)

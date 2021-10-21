@@ -131,9 +131,6 @@ dmypy.json
 # Logging
 wandb
 
-# Data
-*.pkl
-
 # Profiling
 profiling.py
 restats

@@ -7,7 +7,7 @@ from prodassign.problem import ProductAssignement, Solution
 
 class GreedySolution(ProductAssignement):
 
-    def build(self, verbose=1):
+    def build(self, verbose=1, max_time=10):
         products_per_capacities = {capa.item_id:[] for capa in self.capacities}
         order = np.argsort([product.weight for product in self.products])
         self.products = np.take(self.products, order)
